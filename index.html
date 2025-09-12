@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floating Farming Time Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="floating-window" id="floatingWindow">
+        <div class="window-header" id="windowHeader">
+            <div class="window-title">Farming Tracker</div>
+            <div class="window-controls">
+                <button class="window-control" id="minimizeBtn">—</button>
+                <button class="window-control" id="settingsBtn">⚙</button>
+            </div>
+        </div>
+        <div class="window-content">
+            <div class="api-key-form">
+                <input type="text" id="apiKey" placeholder="Enter your private API key">
+                <button id="fetchData" class="themed-button">Load Data</button>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="fields">Fields</div>
+                <div class="tab" data-tab="animals">Animals</div>
+            </div>
+            
+            <div id="fieldsTab" class="tab-content active">
+                <div class="loading" id="fieldsLoading">Loading fields data...</div>
+                <div class="error" id="fieldsError" style="display: none;"></div>
+                <div id="fieldsContainer"></div>
+            </div>
+            
+            <div id="animalsTab" class="tab-content">
+                <div class="loading" id="animalsLoading">Loading animals data...</div>
+                <div class="error" id="animalsError" style="display: none;"></div>
+                <div id="animalsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Settings</div>
+                <button class="close-modal">&times;</button>
+            </div>
+            
+            <div class="settings-group">
+                <label for="opacityRange">Window Opacity: <span id="opacityValue">100%</span></label>
+                <input type="range" id="opacityRange" min="20" max="100" value="100">
+            </div>
+            
+            <div class="settings-group">
+                <label for="refreshInterval">Refresh Interval:</label>
+                <select id="refreshInterval">
+                    <option value="5">5 seconds</option>
+                    <option value="30">30 seconds</option>
+                    <option value="60" selected>1 minute</option>
+                    <option value="120">2 minutes</option>
+                    <option value="300">5 minutes</option>
+                    <option value="600">10 minutes</option>
+                    <option value="1800">30 minutes</option>
+                    <option value="3600">1 hour</option>
+                    <option value="43200">12 hours</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <input type="number" id="customRefreshTime" placeholder="Time in seconds" style="display: none; margin-top: 5px;">
+            </div>
+            
+            <div class="settings-group">
+                <label>Color Theme:</label>
+                <div class="theme-options">
+                    <div class="theme-option theme-green active" data-theme="green" title="Green"></div>
+                    <div class="theme-option theme-blue" data-theme="blue" title="Blue"></div>
+                    <div class="theme-option theme-purple" data-theme="purple" title="Purple"></div>
+                    <div class="theme-option theme-red" data-theme="red" title="Red"></div>
+                    <div class="theme-option theme-pink" data-theme="pink" title="Pink"></div>
+                    <div class="theme-option theme-black" data-theme="black" title="Black"></div>
+                    <div class="theme-option theme-yellow" data-theme="yellow" title="Yellow"></div>
+                    <div class="theme-option theme-orange" data-theme="orange" title="Orange"></div>
+                </div>
+            </div>
+            
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="themeToggle"> Light Mode
+                </label>
+            </div>
+            
+            <button id="saveSettings" class="themed-button settings-save-btn">Save Settings</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
