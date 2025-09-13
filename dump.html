@@ -112,7 +112,7 @@
     <div class="container" id="draggableWindow">
         <div class="header-bar" id="dragHandle">
             <h2>Live Data Cache</h2>
-            <span class="version-tag">v1.5</span>
+            <span class="version-tag">v1.6</span>
         </div>
         <div class="content-body">
             <p>This resizable window displays real-time data from the game.</p>
@@ -280,8 +280,6 @@
                     window.parent.postMessage({ type: "notification", text: `[Dump Script] Trigger failed: No menu is open.` }, "*");
                     return;
                 }
-
-                window.parent.postMessage({ type: "notification", text: `[Dump Script] Trigger received. Looking for menu...` }, "*");
                 
                 // 1. Wait until the "Open Storage" option is visible in the currently open menu
                 await waitUntil(
@@ -291,8 +289,6 @@
                     `Could not find option 'Open Storage' in menu.`
                 );
                 
-                window.parent.postMessage({ type: "notification", text: `[Dump Script] Found 'Open Storage'. Clicking...` }, "*");
-
                 // 2. Find the full menu choice text (with HTML tags) and "click" it
                 const openStorageChoice = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim().includes("Open Storage"))[0];
                 await forceMenuChoice(openStorageChoice, 0);
@@ -305,13 +301,9 @@
                     `Could not find option '${PUT_ALL_ACTION}' in menu.`
                 );
                 
-                window.parent.postMessage({ type: "notification", text: `[Dump Script] Found 'Put All'. Clicking...` }, "*");
-
                 // 4. Find the full menu choice text for "Put All" and "click" it
                 const putAllChoice = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim().includes(PUT_ALL_ACTION))[0];
                 await forceMenuChoice(putAllChoice, 0);
-                
-                window.parent.postMessage({ type: "notification", text: `[Dump Script] Dump sequence complete.` }, "*");
 
             } catch (error) {
                 window.parent.postMessage({ type: "notification", text: `[Dump Script] Error: ${error.message}` }, "*");
@@ -320,38 +312,35 @@
         
         window.addEventListener("message", (event) => {
             const data = event.data;
-            if (!data) return;
+            if (!data || !data.data) return;
 
             const triggerValueKey = `trigger_${DUMP_TRIGGER_CONFIG.triggerKey}`;
+            const receivedData = data.data;
 
-            // Handle Data Caching from the parent.
-            if (data.data) {
-                const oldTriggerValue = cache[triggerValueKey];
-
-                for (const [key, value] of Object.entries(data.data)) {
-                     cache[key] = value;
-                     if (key === 'menu_choices') {
-                        if (typeof value === 'string') {
-                            try {
-                                cache[key] = JSON.parse(value ?? "[]");
-                            } catch {
-                                cache[key] = [];
-                            }
-                        } else if (Array.isArray(value)) {
-                            cache[key] = value;
-                        } else {
+            // Check for trigger activation BEFORE updating the main cache, mimicking original script's logic.
+            if (receivedData[triggerValueKey] != null && receivedData[triggerValueKey] !== cache[triggerValueKey]) {
+                window.parent.postMessage({ type: "notification", text: `[Dump Script] Trigger received. Looking for menu...` }, "*");
+                performDump();
+            }
+            
+            // Now, update the cache with all received data.
+            for (const [key, value] of Object.entries(receivedData)) {
+                 cache[key] = value;
+                 if (key === 'menu_choices') {
+                    if (typeof value === 'string') {
+                        try {
+                            cache[key] = JSON.parse(value ?? "[]");
+                        } catch {
                             cache[key] = [];
                         }
+                    } else if (Array.isArray(value)) {
+                        cache[key] = value;
+                    } else {
+                        cache[key] = [];
                     }
                 }
-                
-                // Check for trigger activation *after* updating the cache
-                if (cache[triggerValueKey] !== oldTriggerValue && cache[triggerValueKey] != null) {
-                    performDump();
-                }
-
-                updateCacheDisplay();
             }
+            updateCacheDisplay();
         });
 
         document.addEventListener("DOMContentLoaded", function() {
