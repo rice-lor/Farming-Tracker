@@ -112,7 +112,7 @@
     <div class="container" id="draggableWindow">
         <div class="header-bar" id="dragHandle">
             <h2>Live Data Cache</h2>
-            <span class="version-tag">v1.4</span>
+            <span class="version-tag">v1.5</span>
         </div>
         <div class="content-body">
             <p>This resizable window displays real-time data from the game.</p>
@@ -276,11 +276,16 @@
 
         async function performDump() {
             try {
+                if (!cache.menu_open) {
+                    window.parent.postMessage({ type: "notification", text: `[Dump Script] Trigger failed: No menu is open.` }, "*");
+                    return;
+                }
+
                 window.parent.postMessage({ type: "notification", text: `[Dump Script] Trigger received. Looking for menu...` }, "*");
                 
-                // 1. Wait until the "Open Storage" option is visible in an open menu
+                // 1. Wait until the "Open Storage" option is visible in the currently open menu
                 await waitUntil(
-                    () => cache.menu_open && Array.isArray(cache.menu_choices) && cache.menu_choices.some(c => c && typeof c[0] === 'string' && c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim().includes("Open Storage")),
+                    () => Array.isArray(cache.menu_choices) && cache.menu_choices.some(c => c && typeof c[0] === 'string' && c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim().includes("Open Storage")),
                     NUI_RETRIES,
                     NUI_TIMEOUT,
                     `Could not find option 'Open Storage' in menu.`
@@ -321,14 +326,11 @@
 
             // Handle Data Caching from the parent.
             if (data.data) {
-                for (const [key, value] of Object.entries(data.data)) {
-                    // Cache the raw trigger value
-                    if (key === triggerValueKey && value !== cache[triggerValueKey]) {
-                        performDump();
-                    }
-                    cache[key] = value;
+                const oldTriggerValue = cache[triggerValueKey];
 
-                    if (key === 'menu_choices') {
+                for (const [key, value] of Object.entries(data.data)) {
+                     cache[key] = value;
+                     if (key === 'menu_choices') {
                         if (typeof value === 'string') {
                             try {
                                 cache[key] = JSON.parse(value ?? "[]");
@@ -342,6 +344,12 @@
                         }
                     }
                 }
+                
+                // Check for trigger activation *after* updating the cache
+                if (cache[triggerValueKey] !== oldTriggerValue && cache[triggerValueKey] != null) {
+                    performDump();
+                }
+
                 updateCacheDisplay();
             }
         });
