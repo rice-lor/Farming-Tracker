@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventory Dump with Trigger</title>
+</head>
+<body>
+    <!-- UI is intentionally left blank as per the request. -->
+    <script>
+    (() => {
+        // --- CONFIGURATION ---
+        // You can customize the trigger key and its display name here.
+        const DUMP_TRIGGER_CONFIG = {
+            triggerKey: "dumpinventory",
+            displayName: "Dump Inventory" 
+        };
+        
+        // --- CONSTANTS from original script ---
+        const OPEN_STORAGE_ACTION = "Open Storage";
+        const PUT_ALL_ACTION = "Put All";
+        const NUI_TIMEOUT = 10;
+        const NUI_RETRIES = 300;
+        const NUI_SUBMIT_TIMEOUT = 5;
+        const NUI_SUBMIT_RETRIES = 200;
+        const NUI_EXTRA_DELAY = 10;
+        
+        // --- CACHE ---
+        // This object will store data received from the parent application.
+        const cache = {};
+
+        // --- CORE LOGIC ---
+
+        /**
+         * A simple delay function.
+         * @param {number} ms - Milliseconds to wait.
+         * @returns {Promise<void>}
+         */
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        /**
+         * Waits until a specific condition is met, with a timeout.
+         * @param {function(): boolean} conditionFn - Function that returns true when the condition is met.
+         * @param {number} retries - How many times to check.
+         * @param {number} timeout - How long to wait between checks.
+         * @param {string} [errorMessage=null] - Error to throw on failure.
+         * @returns {Promise<boolean>}
+         */
+        function waitUntil(conditionFn, retries, timeout, errorMessage = null) {
+            return new Promise(async (resolve, reject) => {
+                while (conditionFn() === false) {
+                    if (retries-- <= 0) return reject(errorMessage);
+                    await sleep(timeout);
+                }
+                await sleep(NUI_EXTRA_DELAY);
+                resolve(true);
+            });
+        }
+
+        /**
+         * Sends a menu choice command to the parent and waits for the menu state to change.
+         * @param {string} choice - The menu option text to select.
+         * @param {number} [mod=0] - The modification (-1 for left, 0 for enter, 1 for right).
+         */
+        async function forceMenuChoice(choice, mod = 0) {
+            const initialMenu = cache.menu;
+            const initialMenuOpen = cache.menu_open;
+            const initialPrompt = cache.prompt;
+            const initialChoices = JSON.stringify(cache.menu_choices);
+
+            window.parent.postMessage({
+                type: "forceMenuChoice",
+                choice: choice,
+                mod: mod
+            }, "*");
+            
+            try {
+                // Wait for the menu state to be different than it was before the command.
+                await waitUntil(() => 
+                    initialMenu !== cache.menu || 
+                    initialMenuOpen !== cache.menu_open || 
+                    initialPrompt !== cache.prompt || 
+                    initialChoices !== JSON.stringify(cache.menu_choices), 
+                    NUI_SUBMIT_RETRIES, 
+                    NUI_SUBMIT_TIMEOUT
+                );
+            } catch {
+                // If the wait times out, we continue anyway as some actions don't change the menu.
+            }
+        }
+
+        /**
+         * Executes the full dump sequence.
+         */
+        async function executeDumpSequence() {
+            try {
+                // 1. Wait for the "Open Storage" option to be available in the menu.
+                await waitUntil(() => 
+                    cache.menu_open && 
+                    (cache.menu_choices ?? []).some(c => c && c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === OPEN_STORAGE_ACTION),
+                    NUI_RETRIES, 
+                    NUI_TIMEOUT, 
+                    `Could not find option '${OPEN_STORAGE_ACTION}' in menu.`
+                );
+
+                // Find the exact menu choice text (including HTML tags).
+                const openStorageChoice = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === OPEN_STORAGE_ACTION)[0];
+                await forceMenuChoice(openStorageChoice, 0);
+
+                // 2. After opening storage, wait for the "Put All" option.
+                await waitUntil(() => 
+                    cache.menu_open && 
+                    (cache.menu_choices ?? []).some(c => c && c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === PUT_ALL_ACTION),
+                    NUI_RETRIES, 
+                    NUI_TIMEOUT, 
+                    `Could not find option '${PUT_ALL_ACTION}' in menu.`
+                );
+
+                const putAllChoice = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === PUT_ALL_ACTION)[0];
+                await forceMenuChoice(putAllChoice, 0);
+
+            } catch (error) {
+                // Errors from waitUntil will be caught here.
+                // We can send a notification back to the game if needed.
+                window.parent.postMessage({ type: "notification", text: error }, "*");
+            }
+        }
+        
+        /**
+         * Listens for messages from the parent application.
+         */
+        window.addEventListener("message", (event) => {
+            if (!event.data) return;
+
+            // Handle data updates to populate the cache.
+            if (event.data.data) {
+                for (const [key, value] of Object.entries(event.data.data)) {
+                    if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
+                         cache[key] = value;
+                    }
+                    if (key === 'menu_choices') {
+                        // Ensure menu_choices is always an array.
+                        cache[key] = JSON.parse(value ?? "[]");
+                    }
+                }
+            }
+
+            // Handle the trigger action.
+            if (event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
+                executeDumpSequence();
+            }
+        });
+
+        /**
+         * This script runs when the document is loaded.
+         */
+        document.addEventListener("DOMContentLoaded", function() {
+            // Register the custom trigger with the parent.
+            window.parent.postMessage({
+                type: "registerTrigger",
+                trigger: DUMP_TRIGGER_CONFIG.triggerKey,
+                name: DUMP_TRIGGER_CONFIG.displayName
+            }, "*");
+            
+            // Request the initial data to populate the cache.
+            window.parent.postMessage({
+                type: "getNamedData",
+                keys: ["menu", "menu_choices", "menu_open", "prompt"]
+            }, "*");
+        });
+    })();
+    </script>
+</body>
+</html>
+
+
