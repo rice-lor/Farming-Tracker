@@ -4,26 +4,62 @@
     <meta charset="UTF-8">
     <title>Inventory Dump with Trigger</title>
     <style>
+        /* Make the overall page transparent */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #1a1a1a;
+            background-color: transparent;
             color: #f0f0f0;
             margin: 0;
-            padding: 15px;
+            padding: 0;
             font-size: 14px;
+            overflow: hidden; /* Prevent body scrollbars */
         }
+
+        /* The main container, which acts as a draggable and resizable window */
         .container {
-            background-color: #2c2c2c;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 400px; /* Default width */
+            height: 450px; /* Default height */
+            background-color: rgba(44, 44, 44, 0.95); /* Semi-transparent background */
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            resize: both; /* Allow resizing */
+            overflow: hidden; /* Hide overflowing content during resize */
+            display: flex;
+            flex-direction: column;
+            min-width: 250px;
+            min-height: 200px;
         }
+
+        .header-bar {
+            background-color: rgba(58, 58, 58, 0.9);
+            padding: 8px 15px;
+            cursor: move; /* Indicate that this area can be dragged */
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         h2 {
             color: #bb86fc;
-            border-bottom: 2px solid #3c3c3c;
-            padding-bottom: 10px;
-            margin-top: 0;
+            margin: 0;
+            font-size: 16px;
+            user-select: none; /* Prevent text selection while dragging */
         }
+        
+        .content-body {
+            padding: 15px;
+            flex-grow: 1;
+            overflow-y: auto; /* Make the content area scrollable */
+        }
+
+        p {
+            color: #a0a0a0;
+            margin-top: 0;
+            line-height: 1.5;
+        }
+        
         pre {
             background-color: #1e1e1e;
             padding: 15px;
@@ -31,21 +67,29 @@
             white-space: pre-wrap;
             word-wrap: break-word;
             font-family: "Courier New", Courier, monospace;
-            min-height: 100px;
             color: #e0e0e0;
             border: 1px solid #444;
+            max-height: 400px; /* Allow scrolling within the pre tag if content is very large */
+            overflow-y: auto;
         }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
         button {
             background-color: #03dac6;
             color: #121212;
             border: none;
-            padding: 12px 25px;
-            font-size: 16px;
+            padding: 10px 20px;
+            font-size: 14px;
             font-weight: bold;
             border-radius: 6px;
             cursor: pointer;
             transition: background-color 0.3s, transform 0.1s;
-            margin-top: 15px;
+            flex-grow: 1;
         }
         button:hover {
             background-color: #01bfa9;
@@ -53,25 +97,29 @@
         button:active {
             transform: scale(0.98);
         }
-        p {
-            color: #a0a0a0;
-        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Live Data Cache</h2>
-        <p>This box displays the real-time data received from the game. Use it to verify that <code>menu</code> and <code>menu_choices</code> are updating correctly.</p>
-        <pre id="cache-display">Cache is currently empty.</pre>
-        <button id="getDataBtn">Manually Request Data</button>
+    <div class="container" id="draggableWindow">
+        <div class="header-bar" id="dragHandle">
+            <h2>Live Data Cache</h2>
+        </div>
+        <div class="content-body">
+            <p>This resizable window displays real-time data from the game.</p>
+            <pre id="cache-display">Cache is currently empty.</pre>
+            <div class="button-group">
+                <button id="getDataBtn">Request Data</button>
+                <button id="copyBtn">Copy Cache</button>
+            </div>
+        </div>
     </div>
 
     <script>
     (() => {
         // --- CONFIGURATION & CONSTANTS ---
         const DUMP_TRIGGER_CONFIG = {
-            triggerKey: "inventorydump", // Hardcoded trigger key
-            displayName: "Inventory Dump" // Hardcoded display name
+            triggerKey: "inventorydump", 
+            displayName: "Inventory Dump" 
         };
         
         const OPEN_STORAGE_ACTION = "Open Storage";
@@ -89,6 +137,9 @@
         // --- UI & DEBUGGING ---
         const cacheDisplay = document.getElementById('cache-display');
         const getDataBtn = document.getElementById('getDataBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const draggableWindow = document.getElementById('draggableWindow');
+        const dragHandle = document.getElementById('dragHandle');
 
         function updateCacheDisplay() {
             cacheDisplay.textContent = JSON.stringify(cache, null, 2);
@@ -100,6 +151,72 @@
                 keys: ["menu", "menu_choices", "menu_open", "prompt"]
             }, "*");
         });
+        
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = cacheDisplay.textContent;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            
+            // Provide feedback to the user
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy Cache'; }, 1500);
+        });
+
+        // --- WINDOW DRAG & RESIZE LOGIC ---
+        function loadWindowTransform() {
+            const pos = localStorage.getItem('windowPosition');
+            const size = localStorage.getItem('windowSize');
+            if (pos) {
+                const { top, left } = JSON.parse(pos);
+                draggableWindow.style.top = top;
+                draggableWindow.style.left = left;
+            }
+            if (size) {
+                const { width, height } = JSON.parse(size);
+                draggableWindow.style.width = width;
+                draggableWindow.style.height = height;
+            }
+        }
+
+        function saveWindowTransform() {
+            localStorage.setItem('windowPosition', JSON.stringify({ top: draggableWindow.style.top, left: draggableWindow.style.left }));
+            localStorage.setItem('windowSize', JSON.stringify({ width: draggableWindow.style.width, height: draggableWindow.style.height }));
+        }
+
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        dragHandle.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - draggableWindow.getBoundingClientRect().left;
+            offsetY = e.clientY - draggableWindow.getBoundingClientRect().top;
+            draggableWindow.style.userSelect = 'none'; 
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            draggableWindow.style.left = `${e.clientX - offsetX}px`;
+            draggableWindow.style.top = `${e.clientY - offsetY}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                draggableWindow.style.userSelect = 'auto';
+                saveWindowTransform();
+            }
+        });
+
+        const resizeObserver = new ResizeObserver(() => {
+           if (!isDragging) { // Avoid saving size constantly while dragging
+               saveWindowTransform();
+           }
+        });
+        resizeObserver.observe(draggableWindow);
 
 
         // --- CORE LOGIC ---
@@ -127,11 +244,7 @@
                 menu_choices: JSON.stringify(cache.menu_choices)
             };
 
-            window.parent.postMessage({
-                type: "forceMenuChoice",
-                choice: choice,
-                mod: mod
-            }, "*");
+            window.parent.postMessage({ type: "forceMenuChoice", choice: choice, mod: mod }, "*");
             
             try {
                 await waitUntil(() => 
@@ -198,7 +311,7 @@
                         }
                     }
                 }
-                updateCacheDisplay(); // Update the UI when new data arrives
+                updateCacheDisplay();
             }
 
             if (event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
@@ -208,6 +321,8 @@
         });
 
         document.addEventListener("DOMContentLoaded", function() {
+            loadWindowTransform();
+
             window.parent.postMessage({
                 type: "registerTrigger",
                 trigger: DUMP_TRIGGER_CONFIG.triggerKey,
