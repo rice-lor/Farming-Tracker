@@ -39,6 +39,9 @@
             padding: 8px 15px;
             cursor: move; /* Indicate that this area can be dragged */
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         h2 {
@@ -48,6 +51,12 @@
             user-select: none; /* Prevent text selection while dragging */
         }
         
+        .version-tag {
+            color: #a0a0a0;
+            font-size: 12px;
+            font-weight: normal;
+        }
+
         .content-body {
             padding: 15px;
             flex-grow: 1;
@@ -103,6 +112,7 @@
     <div class="container" id="draggableWindow">
         <div class="header-bar" id="dragHandle">
             <h2>Live Data Cache</h2>
+            <span class="version-tag">v1.0</span>
         </div>
         <div class="content-body">
             <p>This resizable window displays real-time data from the game.</p>
@@ -301,37 +311,50 @@
         }
         
         window.addEventListener("message", (event) => {
-            if (!event.data || !event.data.data) {
-                 if (event.data && event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
-                    const dumpSequence = createInventoryDumpActions();
-                    executeActions(dumpSequence);
-                }
+            if (!event.data) {
                 return;
             }
+
+            // Handle Trigger Activation
+            if (event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
+                const dumpSequence = createInventoryDumpActions();
+                executeActions(dumpSequence);
+            }
             
-            for (const [key, value] of Object.entries(event.data.data)) {
-                if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
-                     cache[key] = value;
-                }
-                if (key === 'menu_choices') {
-                    if (typeof value === 'string') {
-                        try {
-                            cache[key] = JSON.parse(value ?? "[]");
-                        } catch {
+            // Handle Data Caching
+            if (event.data.data) {
+                for (const [key, value] of Object.entries(event.data.data)) {
+                    if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
+                         cache[key] = value;
+                    }
+                    if (key === 'menu_choices') {
+                        if (typeof value === 'string') {
+                            try {
+                                cache[key] = JSON.parse(value ?? "[]");
+                            } catch {
+                                cache[key] = [];
+                            }
+                        } else if (Array.isArray(value)) {
+                            cache[key] = value;
+                        } else {
                             cache[key] = [];
                         }
-                    } else if (Array.isArray(value)) {
-                        cache[key] = value;
-                    } else {
-                        cache[key] = [];
                     }
                 }
+                updateCacheDisplay();
             }
-            updateCacheDisplay();
         });
 
         document.addEventListener("DOMContentLoaded", function() {
             loadWindowTransform();
+
+            const escapeListener = (e) => {
+                if (e.key === "Escape") {
+                    // Pin the window, meaning we give control back to the game
+                    window.parent.postMessage({type: "pin"}, "*");
+                }
+            };
+            window.addEventListener('keydown', escapeListener);
 
             window.parent.postMessage({
                 type: "registerTrigger",
