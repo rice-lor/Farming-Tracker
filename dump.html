@@ -3,9 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <title>Inventory Dump with Trigger</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 15px;
+            font-size: 14px;
+        }
+        .container {
+            background-color: #2c2c2c;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        h2 {
+            color: #bb86fc;
+            border-bottom: 2px solid #3c3c3c;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        pre {
+            background-color: #1e1e1e;
+            padding: 15px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "Courier New", Courier, monospace;
+            min-height: 100px;
+            color: #e0e0e0;
+            border: 1px solid #444;
+        }
+        button {
+            background-color: #03dac6;
+            color: #121212;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            margin-top: 15px;
+        }
+        button:hover {
+            background-color: #01bfa9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        p {
+            color: #a0a0a0;
+        }
+    </style>
 </head>
 <body>
-    <!-- UI is intentionally left blank as per the request. -->
+    <div class="container">
+        <h2>Live Data Cache</h2>
+        <p>This box displays the real-time data received from the game. Use it to verify that <code>menu</code> and <code>menu_choices</code> are updating correctly.</p>
+        <pre id="cache-display">Cache is currently empty.</pre>
+        <button id="getDataBtn">Manually Request Data</button>
+    </div>
+
     <script>
     (() => {
         // --- CONFIGURATION & CONSTANTS ---
@@ -14,11 +74,9 @@
             displayName: "Inventory Dump" // Hardcoded display name
         };
         
-        // Menu action text from the original script
         const OPEN_STORAGE_ACTION = "Open Storage";
         const PUT_ALL_ACTION = "Put All";
         
-        // Timing constants from the original script for reliable execution
         const NUI_TIMEOUT = 10;
         const NUI_RETRIES = 300;
         const NUI_SUBMIT_TIMEOUT = 5;
@@ -26,28 +84,30 @@
         const NUI_EXTRA_DELAY = 10;
         
         // --- CACHE ---
-        // Stores data from the parent application (game client)
         const cache = {};
+
+        // --- UI & DEBUGGING ---
+        const cacheDisplay = document.getElementById('cache-display');
+        const getDataBtn = document.getElementById('getDataBtn');
+
+        function updateCacheDisplay() {
+            cacheDisplay.textContent = JSON.stringify(cache, null, 2);
+        }
+
+        getDataBtn.addEventListener('click', () => {
+             window.parent.postMessage({
+                type: "getNamedData",
+                keys: ["menu", "menu_choices", "menu_open", "prompt"]
+            }, "*");
+        });
+
 
         // --- CORE LOGIC ---
 
-        /**
-         * A simple delay function.
-         * @param {number} ms - Milliseconds to wait.
-         * @returns {Promise<void>}
-         */
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
-        /**
-         * Waits until a specific condition is met, with a timeout.
-         * @param {function(): boolean} conditionFn - Function that returns true when the condition is met.
-         * @param {number} retries - Number of times to check.
-         * @param {number} timeout - Delay between checks.
-         * @param {string} [errorMessage=null] - Error to throw on failure.
-         * @returns {Promise<boolean>}
-         */
         function waitUntil(conditionFn, retries, timeout, errorMessage = null) {
             return new Promise(async (resolve, reject) => {
                 while (conditionFn() === false) {
@@ -59,11 +119,6 @@
             });
         }
 
-        /**
-         * Sends a menu choice command and waits for the menu state to change.
-         * @param {string} choice - The full menu option text to select (including HTML).
-         * @param {number} [mod=0] - The modification (-1 for left, 0 for enter, 1 for right).
-         */
         async function forceMenuChoice(choice, mod = 0) {
             const initialMenuState = {
                 menu: cache.menu,
@@ -79,7 +134,6 @@
             }, "*");
             
             try {
-                // Wait for any change in the menu state
                 await waitUntil(() => 
                     initialMenuState.menu !== cache.menu || 
                     initialMenuState.menu_open !== cache.menu_open || 
@@ -89,19 +143,14 @@
                     NUI_SUBMIT_TIMEOUT
                 );
             } catch {
-                // If the wait times out, we continue anyway as some actions don't change the menu.
+                // Continue even if timeout
             }
         }
 
-        /**
-         * Executes a sequence of actions on the in-game menu.
-         * @param {object[]} actionSequence - The list of actions to perform.
-         */
         async function executeActions(actionSequence) {
             try {
                 for (const step of actionSequence) {
                     for (const action of step.actions) {
-                        // Sanitize action text by removing HTML tags for comparison
                         const cleanActionText = action.action.replace(/(<.+?>)|(&#.+?;)/g, "");
                         
                         await waitUntil(
@@ -111,21 +160,15 @@
                             `Could not find option '${cleanActionText}' in menu.`
                         );
 
-                        // Find the full menu choice text (with HTML tags) to send back
                         const choiceWithTags = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === cleanActionText)[0];
                         await forceMenuChoice(choiceWithTags, action.mod);
                     }
                 }
             } catch (error) {
-                // Send an in-game notification if any step fails.
                 window.parent.postMessage({ type: "notification", text: error.message }, "*");
             }
         }
 
-        /**
-         * Creates the specific action sequence for dumping the inventory.
-         * @returns {object[]}
-         */
         function createInventoryDumpActions() {
             return [{
                 actions: [{
@@ -135,23 +178,18 @@
                     action: PUT_ALL_ACTION,
                     mod: 0
                 }],
-                amount: 0 // Amount is not needed for this simple sequence
+                amount: 0
             }];
         }
         
-        /**
-         * Listens for messages from the parent application.
-         */
         window.addEventListener("message", (event) => {
             if (!event.data) return;
 
-            // Handle data updates to populate the cache.
             if (event.data.data) {
                 for (const [key, value] of Object.entries(event.data.data)) {
                     if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
                          cache[key] = value;
                     }
-                    // The menu_choices are sent as a stringified JSON array.
                     if (key === 'menu_choices') {
                         try {
                              cache[key] = JSON.parse(value ?? "[]");
@@ -160,27 +198,22 @@
                         }
                     }
                 }
+                updateCacheDisplay(); // Update the UI when new data arrives
             }
 
-            // Handle the trigger action.
             if (event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
                 const dumpSequence = createInventoryDumpActions();
                 executeActions(dumpSequence);
             }
         });
 
-        /**
-         * This script runs when the document is loaded.
-         */
         document.addEventListener("DOMContentLoaded", function() {
-            // Register the custom trigger with the parent.
             window.parent.postMessage({
                 type: "registerTrigger",
                 trigger: DUMP_TRIGGER_CONFIG.triggerKey,
                 name: DUMP_TRIGGER_CONFIG.displayName
             }, "*");
             
-            // Request the initial data needed for menu interaction.
             window.parent.postMessage({
                 type: "getNamedData",
                 keys: ["menu", "menu_choices", "menu_open", "prompt"]
