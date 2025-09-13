@@ -264,16 +264,16 @@
             try {
                 for (const step of actionSequence) {
                     for (const action of step.actions) {
-                        const cleanActionText = action.action.replace(/(<.+?>)|(&#.+?;)/g, "");
+                        const cleanActionText = action.action.replace(/(<.+?>)|(&#.+?;)/g, "").trim();
                         
                         await waitUntil(
-                            () => cache.menu_open && (cache.menu_choices ?? []).some(c => c && c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === cleanActionText),
+                            () => cache.menu_open && (cache.menu_choices ?? []).some(c => c && c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim() === cleanActionText),
                             NUI_RETRIES,
                             NUI_TIMEOUT,
                             `Could not find option '${cleanActionText}' in menu.`
                         );
 
-                        const choiceWithTags = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "") === cleanActionText)[0];
+                        const choiceWithTags = cache.menu_choices.find(c => c[0].replace(/(<.+?>)|(&#.+?;)/g, "").trim() === cleanActionText)[0];
                         await forceMenuChoice(choiceWithTags, action.mod);
                     }
                 }
@@ -304,9 +304,18 @@
                          cache[key] = value;
                     }
                     if (key === 'menu_choices') {
-                        try {
-                             cache[key] = JSON.parse(value ?? "[]");
-                        } catch {
+                        // Check if the value is a string that needs parsing, or already an array.
+                        if (typeof value === 'string') {
+                            try {
+                                cache[key] = JSON.parse(value ?? "[]");
+                            } catch {
+                                cache[key] = [];
+                            }
+                        } else if (Array.isArray(value)) {
+                            // It's already an array, so we can use it directly.
+                            cache[key] = value;
+                        } else {
+                            // If it's neither, default to an empty array.
                             cache[key] = [];
                         }
                     }
