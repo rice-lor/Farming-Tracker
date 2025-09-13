@@ -161,7 +161,6 @@
             document.execCommand('copy');
             document.body.removeChild(tempTextArea);
             
-            // Provide feedback to the user
             copyBtn.textContent = 'Copied!';
             setTimeout(() => { copyBtn.textContent = 'Copy Cache'; }, 1500);
         });
@@ -212,7 +211,7 @@
         });
 
         const resizeObserver = new ResizeObserver(() => {
-           if (!isDragging) { // Avoid saving size constantly while dragging
+           if (!isDragging) {
                saveWindowTransform();
            }
         });
@@ -246,6 +245,12 @@
 
             window.parent.postMessage({ type: "forceMenuChoice", choice: choice, mod: mod }, "*");
             
+            const cleanChoice = choice.replace(/(<.+?>)|(&#.+?;)/g, "").trim();
+            if (cleanChoice === PUT_ALL_ACTION) {
+                await sleep(100);
+                return;
+            }
+
             try {
                 await waitUntil(() => 
                     initialMenuState.menu !== cache.menu || 
@@ -255,8 +260,8 @@
                     NUI_SUBMIT_RETRIES, 
                     NUI_SUBMIT_TIMEOUT
                 );
-            } catch {
-                // Continue even if timeout
+            } catch (error) {
+                // Timeouts can be expected if a menu closes. Continue anyway.
             }
         }
 
@@ -278,7 +283,7 @@
                     }
                 }
             } catch (error) {
-                window.parent.postMessage({ type: "notification", text: error.message }, "*");
+                window.parent.postMessage({ type: "notification", text: `[Dump Script] Error: ${error.message}` }, "*");
             }
         }
 
@@ -296,37 +301,33 @@
         }
         
         window.addEventListener("message", (event) => {
-            if (!event.data) return;
-
-            if (event.data.data) {
-                for (const [key, value] of Object.entries(event.data.data)) {
-                    if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
-                         cache[key] = value;
-                    }
-                    if (key === 'menu_choices') {
-                        // Check if the value is a string that needs parsing, or already an array.
-                        if (typeof value === 'string') {
-                            try {
-                                cache[key] = JSON.parse(value ?? "[]");
-                            } catch {
-                                cache[key] = [];
-                            }
-                        } else if (Array.isArray(value)) {
-                            // It's already an array, so we can use it directly.
-                            cache[key] = value;
-                        } else {
-                            // If it's neither, default to an empty array.
+            if (!event.data || !event.data.data) {
+                 if (event.data && event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
+                    const dumpSequence = createInventoryDumpActions();
+                    executeActions(dumpSequence);
+                }
+                return;
+            }
+            
+            for (const [key, value] of Object.entries(event.data.data)) {
+                if (key === 'menu' || key === 'menu_open' || key === 'prompt') {
+                     cache[key] = value;
+                }
+                if (key === 'menu_choices') {
+                    if (typeof value === 'string') {
+                        try {
+                            cache[key] = JSON.parse(value ?? "[]");
+                        } catch {
                             cache[key] = [];
                         }
+                    } else if (Array.isArray(value)) {
+                        cache[key] = value;
+                    } else {
+                        cache[key] = [];
                     }
                 }
-                updateCacheDisplay();
             }
-
-            if (event.data.trigger === DUMP_TRIGGER_CONFIG.triggerKey) {
-                const dumpSequence = createInventoryDumpActions();
-                executeActions(dumpSequence);
-            }
+            updateCacheDisplay();
         });
 
         document.addEventListener("DOMContentLoaded", function() {
@@ -342,6 +343,11 @@
                 type: "getNamedData",
                 keys: ["menu", "menu_choices", "menu_open", "prompt"]
             }, "*");
+
+            // Auto-refresh the page every 30 seconds
+            setInterval(() => {
+                window.location.reload();
+            }, 30000); // 30 seconds in milliseconds
         });
     })();
     </script>
