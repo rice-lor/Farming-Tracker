@@ -1,1 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Data Cache Display</title>
+    <style>
+        /* Make the overall page transparent */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: transparent;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            overflow: hidden; /* Prevent body scrollbars */
+        }
+
+        /* The main container, which acts as a draggable and resizable window */
+        .container {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 400px; /* Default width */
+            height: 450px; /* Default height */
+            background-color: rgba(44, 44, 44, 0.95); /* Semi-transparent background */
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            resize: both; /* Allow resizing */
+            overflow: hidden; /* Hide overflowing content during resize */
+            display: flex;
+            flex-direction: column;
+            min-width: 250px;
+            min-height: 200px;
+        }
+
+        .header-bar {
+            background-color: rgba(58, 58, 58, 0.9);
+            padding: 12px 20px;
+            cursor: move; /* Indicate that this area can be dragged */
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            user-select: none; /* Prevent text selection while dragging */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h2 {
+            color: #bb86fc;
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .version-tag {
+            color: #a0a0a0;
+            font-size: 12px;
+            font-weight: normal;
+        }
+
+        .content-body {
+            padding: 20px;
+            flex-grow: 1;
+            overflow-y: auto; /* Make the content area scrollable */
+        }
+
+        p {
+            color: #a0a0a0;
+            margin-top: 0;
+            line-height: 1.6;
+        }
+        
+        pre {
+            background-color: #141414;
+            padding: 15px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "Courier New", Courier, monospace;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            max-height: 50vh; /* Make the display scrollable */
+            overflow-y: auto;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            background-color: #03dac6;
+            color: #121212;
+            border: none;
+            padding: 12px 25px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            flex-grow: 1;
+        }
+        button:hover {
+            background-color: #01bfa9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="draggableWindow">
+        <div class="header-bar" id="dragHandle">
+            <h2>Live Data Cache</h2>
+            <span class="version-tag">v1.0</span>
+        </div>
+        <div class="content-body">
+            <p>This resizable window displays real-time data from the game. Drag the header to move it.</p>
+            <pre id="cache-display">Waiting for data...</pre>
+            <div class="button-group">
+                <button id="getDataBtn">Get Live Data</button>
+                <button id="copyBtn">Copy Cache</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (() => {
+        const cache = {};
+        const cacheDisplay = document.getElementById('cache-display');
+        const getDataBtn = document.getElementById('getDataBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const draggableWindow = document.getElementById('draggableWindow');
+        const dragHandle = document.getElementById('dragHandle');
+
+        function updateCacheDisplay() {
+            cacheDisplay.textContent = JSON.stringify(cache, null, 2);
+        }
+
+        // --- WINDOW DRAG & RESIZE LOGIC ---
+        function loadWindowTransform() {
+            const pos = localStorage.getItem('windowPosition');
+            const size = localStorage.getItem('windowSize');
+            if (pos) {
+                const { top, left } = JSON.parse(pos);
+                draggableWindow.style.top = top;
+                draggableWindow.style.left = left;
+            }
+            if (size) {
+                const { width, height } = JSON.parse(size);
+                draggableWindow.style.width = width;
+                draggableWindow.style.height = height;
+            }
+        }
+
+        function saveWindowTransform() {
+            localStorage.setItem('windowPosition', JSON.stringify({ top: draggableWindow.style.top, left: draggableWindow.style.left }));
+            localStorage.setItem('windowSize', JSON.stringify({ width: draggableWindow.style.width, height: draggableWindow.style.height }));
+        }
+
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        dragHandle.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - draggableWindow.getBoundingClientRect().left;
+            offsetY = e.clientY - draggableWindow.getBoundingClientRect().top;
+            draggableWindow.style.userSelect = 'none'; 
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            draggableWindow.style.left = `${e.clientX - offsetX}px`;
+            draggableWindow.style.top = `${e.clientY - offsetY}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                draggableWindow.style.userSelect = 'auto';
+                saveWindowTransform();
+            }
+        });
+
+        const resizeObserver = new ResizeObserver(() => {
+           if (!isDragging) {
+               saveWindowTransform();
+           }
+        });
+        resizeObserver.observe(draggableWindow);
+        
+
+        // Listen for messages from the parent application
+        window.addEventListener("message", (event) => {
+            if (event.data && event.data.data) {
+                // Update the cache with all received data
+                for (const [key, value] of Object.entries(event.data.data)) {
+                    cache[key] = value;
+                }
+                updateCacheDisplay();
+            }
+        });
+
+        // Add click listener to the button to request data
+        getDataBtn.addEventListener('click', () => {
+            window.parent.postMessage({ type: "getData" }, "*");
+            cacheDisplay.textContent = "Requesting data...";
+        });
+
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = cacheDisplay.textContent;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            // Use execCommand for broader compatibility in sandboxed environments
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy Cache'; }, 1500);
+        });
+
+        // Initial data request on page load
+        document.addEventListener("DOMContentLoaded", function() {
+            loadWindowTransform();
+
+            const escapeListener = (e) => {
+                if (e.key === "Escape") {
+                    window.parent.postMessage({type: "pin"}, "*");
+                }
+            };
+            window.addEventListener('keydown', escapeListener);
+            
+            window.parent.postMessage({ type: "getData" }, "*");
+        });
+    })();
+    </script>
+</body>
+</html>
+
 
