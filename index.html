@@ -17,27 +17,27 @@
         </div>
         <div class="window-content">
             <div class="api-key-form">
-                <input type="text" id="apiKey" placeholder="Enter your private API key">
-                <button id="fetchData" class="themed-button">Load Data</button>
+                <button id="fetchData" class="themed-button">
+                    <span>Load Data</span>
+                </button>
             </div>
             
+            <div id="statusMessage" class="status-container"></div>
+
             <div class="tabs">
                 <div class="tab active" data-tab="fields">Fields</div>
                 <div class="tab" data-tab="animals">Animals</div>
             </div>
             
             <div id="fieldsTab" class="tab-content active">
-                <div class="loading" id="fieldsLoading">Loading fields data...</div>
-                <div class="error" id="fieldsError" style="display: none;"></div>
                 <div id="fieldsContainer"></div>
             </div>
             
             <div id="animalsTab" class="tab-content">
-                <div class="loading" id="animalsLoading">Loading animals data...</div>
-                <div class="error" id="animalsError" style="display: none;"></div>
                 <div id="animalsContainer"></div>
             </div>
         </div>
+        <div class="resize-handle" id="resizeHandle"></div>
     </div>
 
     <!-- Settings Modal -->
@@ -48,6 +48,11 @@
                 <button class="close-modal">&times;</button>
             </div>
             
+            <div class="settings-group">
+                <label for="apiKey">Custom API Key:</label>
+                <input type="password" id="apiKey" placeholder="Enter your private API key">
+            </div>
+
             <div class="settings-group">
                 <label for="opacityRange">Window Opacity: <span id="opacityValue">100%</span></label>
                 <input type="range" id="opacityRange" min="20" max="100" value="100">
@@ -89,6 +94,12 @@
                     <input type="checkbox" id="themeToggle"> Light Mode
                 </label>
             </div>
+
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="layoutToggle"> Two columns layout
+                </label>
+            </div>
             
             <button id="saveSettings" class="themed-button settings-save-btn">Save Settings</button>
         </div>
@@ -97,3 +108,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
